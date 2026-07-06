@@ -218,8 +218,7 @@ export default function HomePage() {
                 DealScout <span className="mx-1">›</span> {SECTION_LABEL[section]}
               </div>
               <h1 className="text-2xl font-bold mt-1">
-                Welcome back, Matthew{" "}
-                <span className="inline-block">👋</span>
+                Welcome back <span className="inline-block">👋</span>
               </h1>
               <p className="text-sm text-[var(--muted)] mt-1">
                 {SECTION_DESC[section]}

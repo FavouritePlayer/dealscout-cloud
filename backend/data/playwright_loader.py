@@ -1,15 +1,7 @@
 """Loads the multi-category listings fixture from disk.
 
-Named `playwright_loader` to satisfy the hackathon stack requirement that the
-data layer be a Playwright wrapper. For the 3-hour build it does not perform
-any real scraping — it reads a static fixture JSON. The interface is shaped
-so a future live-scraping implementation can drop in without changing
-callers (see backend/dev/scrape_demo.py for an offline proof that live
-scraping is possible).
-
-Contract change vs. the chair-only build: there is now a single fixture
-file (`listings_fixture.json`) covering all categories, so callers no
-longer pass a category name in.
+Thin loader for tests and offline development. Live scraping is handled by
+`live_loader.py`.
 """
 
 import json

@@ -87,9 +87,9 @@ export default function Sidebar({
         <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-neutral-50 border border-[var(--border)]">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-300 to-amber-300" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold truncate">Matthew R.</div>
+            <div className="text-xs font-semibold truncate">Demo user</div>
             <div className="text-[11px] text-[var(--muted)] truncate">
-              berkeley.edu
+              dealscout.app
             </div>
           </div>
         </div>
