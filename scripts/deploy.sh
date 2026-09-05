@@ -22,24 +22,45 @@ project_name="dealscout"
 run_remote() {
   # Sends $1 (a shell script) to the node via SSM Run Command and blocks
   # until it finishes, printing stdout/stderr.
+  #
+  # The AWS CLI's shorthand `--parameters "commands=[...]"` syntax does
+  # NOT survive a multi-line string intact — it collapses embedded
+  # newlines, which silently corrupted every remote script here (e.g.
+  # "export KUBECONFIG=... kubectl delete secret ..." all ran as one
+  # line, so `export` tried to treat "kubectl", "delete", etc. as
+  # variable names). Building a real JSON parameters file instead avoids
+  # that parser entirely.
   local script="$1"
-  local cmd_id
+  local cmd_id params_file
+  params_file=$(mktemp)
+  jq -n --arg cmd "$script" '{commands: [$cmd]}' > "$params_file"
+
   cmd_id=$(aws ssm send-command \
     --profile "$PROFILE" --region "$REGION" \
     --instance-ids "$instance_id" \
     --document-name "AWS-RunShellScript" \
-    --parameters "commands=[$(jq -Rs . <<<"$script")]" \
+    --parameters "file://$params_file" \
     --query "Command.CommandId" --output text)
+  rm -f "$params_file"
 
   aws ssm wait command-executed \
     --profile "$PROFILE" --region "$REGION" \
     --command-id "$cmd_id" --instance-id "$instance_id" 2>/dev/null || true
 
-  aws ssm get-command-invocation \
+  local result
+  result=$(aws ssm get-command-invocation \
     --profile "$PROFILE" --region "$REGION" \
     --command-id "$cmd_id" --instance-id "$instance_id" \
     --query "{status:Status,stdout:StandardOutputContent,stderr:StandardErrorContent}" \
-    --output json
+    --output json)
+  echo "$result"
+
+  local remote_status
+  remote_status=$(jq -r .status <<<"$result")
+  if [ "$remote_status" != "Success" ]; then
+    echo "Remote command failed (status: $remote_status) — aborting." >&2
+    exit 1
+  fi
 }
 
 echo "== Refreshing ECR pull secret and app secrets on the node =="
