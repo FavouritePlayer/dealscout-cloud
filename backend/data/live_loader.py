@@ -59,7 +59,10 @@ CATEGORY_CODES = {
     "sporting_goods": "sga",
     "instruments": "msa",
 }
-ITEMS_PER_CATEGORY = 5
+# The search page's DOM already holds ~120 results per category from one
+# page load, so raising this is nearly free (no extra requests) and
+# directly widens the pool a genuine underpriced item can turn up in.
+ITEMS_PER_CATEGORY = 20
 
 # Rough miles from a fixed reference point (downtown Berkeley) so the "near
 # you" framing has something real to show — not an actual geocoder.
@@ -151,15 +154,23 @@ def _estimate_values(listings: list[dict]) -> dict[str, dict]:
     if not listings:
         return {}
 
-    prompt = f"""You are an expert resale flipper estimating value for real, live marketplace listings.
+    # Deliberately withholds asking_price here: showing the model the
+    # seller's price before asking it to estimate resale value anchors the
+    # estimate toward that number (a well-documented LLM bias), which
+    # suppressed genuine underpriced finds — nearly every estimate came
+    # back at or just below asking. The estimate needs to be an
+    # independent read of what the item is actually worth; the caller
+    # compares it against the real asking_price afterward to classify
+    # over/undervalued, so anchoring here defeats the whole point.
+    prompt = f"""You are an expert resale flipper estimating fair market value for real, live marketplace listings, with no knowledge of what the seller is asking.
 
-For each listing below, only the title, category, and real asking price are known. Estimate:
+For each listing below, only the title and category are known. Estimate:
 - "condition": one of "like new", "good", "fair", "needs repair" — infer from the title's wording, default to "good" if there's no signal
-- "estimated_resale_value": your best-guess realistic resale price in USD for this item in that condition, as a flipper pricing it to resell locally
+- "estimated_resale_value": your best-guess realistic fair-market resale price in USD for this item in that condition, based purely on what it is — not on any price you might expect it to be listed at
 - "description": one plausible sentence describing the item, based only on the title
 
 Listings (JSON array):
-{json.dumps([{"id": l["id"], "title": l["title"], "category": l["category"], "asking_price": l["asking_price"]} for l in listings])}
+{json.dumps([{"id": l["id"], "title": l["title"], "category": l["category"]} for l in listings])}
 
 Return one entry per listing, same order, under "items"."""
 
@@ -188,10 +199,12 @@ Return one entry per listing, same order, under "items"."""
         "additionalProperties": False,
     }
     # gemini-2.5-flash spends tokens on hidden reasoning before the visible
-    # answer; 4096 was getting truncated for 30 listings.
+    # answer; 4096 was getting truncated for 30 listings, and raising
+    # ITEMS_PER_CATEGORY to 20 (up to 120 listings/scrape) needs more room
+    # still.
     response = complete_with_retry(
         [{"role": "user", "content": prompt}],
-        max_tokens=8192,
+        max_tokens=16384,
         schema_name="value_estimates",
         schema=schema,
     )
