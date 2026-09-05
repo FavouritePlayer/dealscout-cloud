@@ -61,7 +61,7 @@ pytest tests/
 
 ## Cloud deployment — two-command lifecycle
 
-**One-time setup** (persistent, cheap-to-free resources — ECR repos, SSM parameters, CloudWatch log group, the GitHub OIDC role, the $8 budget alert):
+**One-time setup** (persistent, cheap-to-free resources — ECR repos, SSM parameters, CloudWatch log group, the GitHub CI IAM user, the $8 budget alert):
 
 ```bash
 cp infra/bootstrap/terraform.tfvars.example infra/bootstrap/terraform.tfvars   # fill in your LLM key + alert email
@@ -95,7 +95,7 @@ aws ssm send-command --profile dealscout --instance-ids <id> \
 
 ## CI/CD
 
-Every push to `main` builds and pushes all three images to ECR via GitHub Actions, authenticated with OIDC (no stored AWS keys). It does **not** auto-deploy — the cluster is ephemeral and often won't exist when CI runs. Deploy manually with `./scripts/deploy.sh` (or `up.sh`, which calls it) whenever the environment is up.
+Every push to `main` builds and pushes all three images to ECR via GitHub Actions. Auth was originally designed as OIDC (no stored keys); this account's org SCPs block all OIDC-provider IAM operations, so it falls back to a scoped IAM user (ECR push only, nothing else) with its key as an encrypted GitHub secret — see [ARCHITECTURE.md](ARCHITECTURE.md#cicd-auth-oidc-was-the-plan-a-scoped-iam-user-is-the-reality) for why. CI does **not** auto-deploy — the cluster is ephemeral and often won't exist when CI runs. Deploy manually with `./scripts/deploy.sh` (or `up.sh`, which calls it) whenever the environment is up.
 
 ## API
 
@@ -119,7 +119,7 @@ dealscout-cloud/
 │   └── data/                     # live_loader (scrape+value), cache (shared with API)
 ├── frontend/                     # Next.js UI
 ├── infra/
-│   ├── bootstrap/                # one-time: ECR, SSM, CloudWatch, budget, GitHub OIDC role
+│   ├── bootstrap/                # one-time: ECR, SSM, CloudWatch, budget, GitHub CI IAM user
 │   └── ephemeral/                # per-session: VPC, SG, EC2+k3s
 ├── k8s/                          # Deployment/Service (API), CronJob (scraper), Qdrant
 ├── scripts/                      # bootstrap.sh, build_and_push.sh, up.sh, down.sh, deploy.sh
