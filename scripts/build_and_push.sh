@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and pushes all three images to ECR. Also run automatically by CI
+# Builds and pushes all four images to ECR. Also run automatically by CI
 # on every push to main (see .github/workflows/build.yml) — run it
 # locally for a first push, or to test a change before CI does.
 set -euo pipefail
@@ -11,6 +11,7 @@ REGION="${AWS_REGION:-us-east-2}"
 api_repo=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .api)
 scraper_repo=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .scraper)
 qdrant_repo=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .qdrant)
+frontend_repo=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .frontend)
 registry="${api_repo%%/*}"
 
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | \
@@ -23,6 +24,10 @@ docker push "$api_repo:latest"
 echo "== scraper =="
 docker build -f "$ROOT/backend/Dockerfile.scraper" -t "$scraper_repo:latest" "$ROOT"
 docker push "$scraper_repo:latest"
+
+echo "== frontend =="
+docker build -f "$ROOT/frontend/Dockerfile" -t "$frontend_repo:latest" "$ROOT/frontend"
+docker push "$frontend_repo:latest"
 
 echo "== qdrant (mirror of qdrant/qdrant, so the cluster never depends on Docker Hub) =="
 docker pull qdrant/qdrant:latest

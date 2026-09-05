@@ -45,11 +45,10 @@ git clone https://github.com/FavouritePlayer/dealscout-cloud.git
 cd dealscout-cloud
 cp backend/.env.example backend/.env   # fill in an LLM key
 
-docker compose up --build          # qdrant, api, frontend
-docker compose --profile scraper run scraper   # seed the listings cache once
+docker compose up --build   # qdrant, api, scraper, frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Re-run the scraper profile whenever you want fresh listings; the API always reads whatever's in the cache.
+Open [http://localhost:3000](http://localhost:3000). The scraper is an always-on service, not a one-shot job — it auto-scrapes every 30 minutes on its own, and clicking **Scrape now** in the UI (or `curl -X POST http://localhost:8001/scrape`) triggers one immediately. The API always reads whatever's currently in the cache.
 
 ### Tests
 
@@ -95,7 +94,7 @@ Every push to `main` builds and pushes all four images to ECR via GitHub Actions
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/scan` | Read cached listings, classify, filter by memory, return queue |
+| `POST` | `/api/scan` | Read cached listings, classify, filter by memory, return queue (`fresh: true` triggers a live scrape first) |
 | `POST` | `/api/feedback` | Accept or reject an item (reject writes to Qdrant) |
 | `GET` | `/api/preferences/:user_id` | List stored preferences |
 | `PUT` | `/api/preferences/:user_id` | Replace all preferences |
