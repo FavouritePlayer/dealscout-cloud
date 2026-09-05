@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INFRA="$ROOT/infra/ephemeral"
 PROFILE="${AWS_PROFILE:-dealscout}"
+source "$ROOT/scripts/lib/aws_creds.sh"
 
 if [ ! -f "$INFRA/terraform.tfvars" ]; then
   echo "Missing $INFRA/terraform.tfvars — copy terraform.tfvars.example and fill it in first." >&2

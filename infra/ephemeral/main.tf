@@ -9,8 +9,8 @@ terraform {
 }
 
 provider "aws" {
-  region  = var.aws_region
-  profile = var.aws_profile
+  region = var.aws_region
+  # See infra/bootstrap/main.tf for why this doesn't use `profile`.
 
   default_tags {
     tags = {

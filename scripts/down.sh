@@ -7,6 +7,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INFRA="$ROOT/infra/ephemeral"
+source "$ROOT/scripts/lib/aws_creds.sh"
 
 terraform -chdir="$INFRA" destroy -auto-approve
 

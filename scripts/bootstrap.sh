@@ -7,6 +7,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BOOTSTRAP="$ROOT/infra/bootstrap"
+source "$ROOT/scripts/lib/aws_creds.sh"
 
 if [ ! -f "$BOOTSTRAP/terraform.tfvars" ]; then
   echo "Missing $BOOTSTRAP/terraform.tfvars — copy terraform.tfvars.example and fill it in first." >&2
