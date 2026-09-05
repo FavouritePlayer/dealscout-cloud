@@ -1,0 +1,53 @@
+name: Build and push images
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GHA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API image
+        run: |
+          docker build -f backend/Dockerfile.api -t "${{ steps.ecr-login.outputs.registry }}/dealscout/api:${{ github.sha }}" -t "${{ steps.ecr-login.outputs.registry }}/dealscout/api:latest" .
+          docker push "${{ steps.ecr-login.outputs.registry }}/dealscout/api:${{ github.sha }}"
+          docker push "${{ steps.ecr-login.outputs.registry }}/dealscout/api:latest"
+
+      - name: Build and push scraper image
+        run: |
+          docker build -f backend/Dockerfile.scraper -t "${{ steps.ecr-login.outputs.registry }}/dealscout/scraper:${{ github.sha }}" -t "${{ steps.ecr-login.outputs.registry }}/dealscout/scraper:latest" .
+          docker push "${{ steps.ecr-login.outputs.registry }}/dealscout/scraper:${{ github.sha }}"
+          docker push "${{ steps.ecr-login.outputs.registry }}/dealscout/scraper:latest"
+
+      # Mirrored so the cluster only ever depends on ECR, not Docker
+      # Hub's anonymous pull rate limits.
+      - name: Mirror qdrant/qdrant into ECR
+        run: |
+          docker pull qdrant/qdrant:latest
+          docker tag qdrant/qdrant:latest "${{ steps.ecr-login.outputs.registry }}/dealscout/qdrant:latest"
+          docker push "${{ steps.ecr-login.outputs.registry }}/dealscout/qdrant:latest"
+
+    # No deploy step here on purpose — the cluster is ephemeral (see
+    # ARCHITECTURE.md) and won't always exist to deploy onto. Deploys
+    # happen manually via ./scripts/deploy.sh once you've brought the
+    # environment up with ./scripts/up.sh.
