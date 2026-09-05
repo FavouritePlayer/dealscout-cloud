@@ -1,118 +1,108 @@
-# DealScout
+# DealScout Cloud
 
-A memory-powered resale arbitrage agent that scans live marketplace listings, surfaces undervalued flip opportunities, and learns from your feedback over time.
+A memory-powered resale arbitrage agent — LangGraph agent, Playwright scraper, Qdrant vector memory — containerized and deployed to a disposable k3s-on-EC2 cluster on AWS. Built as a container/orchestration demo: bring the environment up before an interview, tear it down after, nothing bills in between.
 
-Built for the [Agents You Love Hackathon](https://agentsyoulove.dev) — theme: *Context over Amnesia*.
+Forked from the [Agents You Love Hackathon](https://agentsyoulove.dev) build; this repo replaces the hackathon-sponsor memory backend with a self-hostable one and adds all the cloud infrastructure. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full reasoning behind every infra decision.
 
 ## What it does
 
-DealScout scans Craigslist listings across multiple categories (furniture, electronics, tools, collectibles, sporting goods, instruments), estimates resale value with an LLM, and ranks items by projected profit. You review a queue of flip candidates and reject anything you don't want to deal with — *"I don't flip furniture, too much hassle to move."* DealScout stores that preference in [HydraDB](https://hydradb.ai) and excludes matching items on every future scan without you re-stating yourself.
-
-**The memory is load-bearing:** remove it and the product breaks.
-
-## Demo flow
-
-1. **Scan** — Playwright scrapes live listings; the agent classifies each as undervalued or overvalued and returns a ranked queue.
-2. **Reject with a reason** — Your rejection text is ingested into HydraDB as a long-term memory.
-3. **Rescan** — The agent recalls your preferences autonomously and fully excludes matching categories from the queue, citing your original reason.
+DealScout scans Craigslist listings across multiple categories (furniture, electronics, tools, collectibles, sporting goods, instruments), estimates resale value with an LLM, and ranks items by projected profit. You review a queue of flip candidates and reject anything you don't want to deal with — *"I don't flip furniture, too much hassle to move."* DealScout stores that preference in Qdrant and excludes matching items on every future scan without you re-stating yourself.
 
 ## Tech stack
 
 | Layer | Technologies |
 |---|---|
 | Agent | LangGraph, Python |
-| Memory | HydraDB (semantic memory + graph relations) |
+| Memory | Qdrant (self-hosted vector store) + local `fastembed` embeddings |
 | LLM | Anthropic / Gemini / Nebius (OpenAI-compatible) |
-| Scraping | Playwright (headless Chromium) |
+| Scraping | Playwright (headless Chromium), runs as a k8s CronJob/Job, not a long-lived pod |
 | Backend | FastAPI, Pydantic |
 | Frontend | Next.js 15, React 19, Tailwind CSS 4, TypeScript |
+| Infra | Terraform, k3s on a single EC2 instance, ECR, SSM Parameter Store, CloudWatch Logs |
 
 ## Architecture
 
 ```
-POST /api/scan
-    │
-    ▼
-LangGraph scan pipeline
-    ├─ retrieve_memory  →  HydraDB (user avoid/prefer rules)
+CronJob (scraper, Playwright/Chromium)  ──every 30 min──▶  listings cache (PVC)
+                                                                    │
+POST /api/scan  ──▶  Agent API (Deployment)                        │
+    ├─ read cache ◀─────────────────────────────────────────────────┘
+    ├─ retrieve_memory  →  Qdrant (user avoid/prefer rules)
     ├─ classify_value   →  margin arithmetic (25% threshold)
     └─ filter_and_rank  →  LLM filters by memory, sorts by profit
     │
     ▼
-Live Craigslist scrape (Playwright) + LLM valuation
+Next.js UI (run locally against the cloud API) — queue cards, memory panel, saved flips, history
     │
     ▼
-Next.js UI — queue cards, memory panel, saved flips, history
-    │
-    ▼
-POST /api/feedback  →  update_memory  →  HydraDB ingest
+POST /api/feedback  →  update_memory  →  Qdrant upsert
 ```
 
-## Features
-
-- **Live scraping** — Real titles and asking prices from Craigslist (SF Bay Area)
-- **LLM valuation** — Estimates resale value, condition, and description from listing titles
-- **Persistent memory** — Rejection reasons become durable avoid-rules via HydraDB
-- **Editable preferences** — Add, edit, or remove rules in the Memory view; syncs back to HydraDB
-- **Saved flips** — Bookmark promising listings for later
-- **Action history** — Timeline of scans, rejections, saves, and memory edits
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 20+
-- API keys for HydraDB and an LLM provider (see `backend/.env.example`)
-
-### Setup
+## Local development
 
 ```bash
-# Clone and enter the repo
-git clone https://github.com/FavouritePlayer/DealScout.git
-cd DealScout
+git clone https://github.com/FavouritePlayer/dealscout-cloud.git
+cd dealscout-cloud
+cp backend/.env.example backend/.env   # fill in an LLM key
 
-# Backend
-python3 -m venv backend/.venv
-source backend/.venv/bin/activate
-pip install -r backend/requirements.txt
-playwright install chromium
-cp backend/.env.example backend/.env   # fill in your keys
-
-# Frontend
-cd frontend && npm install && cd ..
+docker compose up --build          # qdrant, api, frontend
+docker compose --profile scraper run scraper   # seed the listings cache once
 ```
 
-### Run
+Open [http://localhost:3000](http://localhost:3000). Re-run the scraper profile whenever you want fresh listings; the API always reads whatever's in the cache.
 
-**Two terminals:**
+### Tests
 
 ```bash
-# Terminal 1 — backend (from repo root)
-source backend/.venv/bin/activate
-python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
-
-# Terminal 2 — frontend
-cd frontend && npm run dev
+cd backend && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt && pip install playwright && playwright install chromium
+pytest tests/
 ```
 
-Or use the helper script:
+## Cloud deployment — two-command lifecycle
+
+**One-time setup** (persistent, cheap-to-free resources — ECR repos, SSM parameters, CloudWatch log group, the GitHub OIDC role, the $8 budget alert):
 
 ```bash
-chmod +x scripts/dev.sh
-./scripts/dev.sh
+cp infra/bootstrap/terraform.tfvars.example infra/bootstrap/terraform.tfvars   # fill in your LLM key + alert email
+./scripts/bootstrap.sh
+./scripts/build_and_push.sh   # first image push (CI handles it after this)
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+**Every demo session** — this is the two-command part:
 
-Set `PLAYWRIGHT_HEADED=1` to watch Chromium scrape live during scans.
+```bash
+cp infra/ephemeral/terraform.tfvars.example infra/ephemeral/terraform.tfvars   # your current IP changes between sessions
+./scripts/up.sh      # EC2 + k3s + networking from scratch, then deploys the app
+./scripts/down.sh    # tears the instance/SG/EBS volume down, nothing left billing
+```
+
+`up.sh` prints the API URL (`http://<node-ip>:30080`) when it's done. Point the local frontend at it:
+
+```bash
+cd frontend && BACKEND_URL=http://<node-ip>:30080 npm run dev
+```
+
+Force a fresh scrape right before a demo instead of waiting on the schedule — `up.sh`'s output includes the exact command, or:
+
+```bash
+aws ssm send-command --profile dealscout --instance-ids <id> \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; kubectl create job --from=cronjob/dealscout-scraper manual-scan-$(date +%s)"]'
+```
+
+**Cost**: well under $0.10 per multi-hour demo session (see [ARCHITECTURE.md](ARCHITECTURE.md#cost)). The $8 budget alert is a backstop, not the expected spend.
+
+## CI/CD
+
+Every push to `main` builds and pushes all three images to ECR via GitHub Actions, authenticated with OIDC (no stored AWS keys). It does **not** auto-deploy — the cluster is ephemeral and often won't exist when CI runs. Deploy manually with `./scripts/deploy.sh` (or `up.sh`, which calls it) whenever the environment is up.
 
 ## API
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/scan` | Scrape listings, classify, filter by memory, return queue |
-| `POST` | `/api/feedback` | Accept or reject an item (reject writes to HydraDB) |
+| `POST` | `/api/scan` | Read cached listings, classify, filter by memory, return queue |
+| `POST` | `/api/feedback` | Accept or reject an item (reject writes to Qdrant) |
 | `GET` | `/api/preferences/:user_id` | List stored preferences |
 | `PUT` | `/api/preferences/:user_id` | Replace all preferences |
 | `DELETE` | `/api/preferences/:user_id` | Clear all memories for a user |
@@ -120,26 +110,20 @@ Set `PLAYWRIGHT_HEADED=1` to watch Chromium scrape live during scans.
 ## Project structure
 
 ```
-DealScout/
+dealscout-cloud/
 ├── backend/
-│   ├── app.py                  # FastAPI server
-│   ├── graph/                  # LangGraph agent (scan + feedback pipelines)
-│   ├── memory/                 # HydraDB client, preference parsing
-│   └── data/
-│       ├── live_loader.py      # Live Craigslist scrape + LLM valuation
-│       └── listings_fixture.json
-├── frontend/
-│   ├── app/                    # Next.js pages and components
-│   └── lib/                    # API client, types, history store
-└── scripts/
-    └── dev.sh                  # Start both servers
-```
-
-## Tests
-
-```bash
-source backend/.venv/bin/activate
-pytest backend/tests/
+│   ├── app.py                    # FastAPI server (no Playwright dependency)
+│   ├── scraper_job.py            # CronJob/Job entrypoint (Playwright)
+│   ├── graph/                    # LangGraph agent (scan + feedback pipelines)
+│   ├── memory/                   # Qdrant client, preference parsing
+│   └── data/                     # live_loader (scrape+value), cache (shared with API)
+├── frontend/                     # Next.js UI
+├── infra/
+│   ├── bootstrap/                # one-time: ECR, SSM, CloudWatch, budget, GitHub OIDC role
+│   └── ephemeral/                # per-session: VPC, SG, EC2+k3s
+├── k8s/                          # Deployment/Service (API), CronJob (scraper), Qdrant
+├── scripts/                      # bootstrap.sh, build_and_push.sh, up.sh, down.sh, deploy.sh
+└── .github/workflows/build.yml   # CI: build+push on push to main, no auto-deploy
 ```
 
 ## License
