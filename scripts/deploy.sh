@@ -17,6 +17,7 @@ instance_id=$(terraform -chdir="$INFRA" output -raw instance_id)
 api_image=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .api):latest
 scraper_image=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .scraper):latest
 qdrant_image=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .qdrant):latest
+frontend_image=$(terraform -chdir="$BOOTSTRAP" output -json ecr_repo_urls | jq -r .frontend):latest
 project_name="dealscout"
 
 run_remote() {
@@ -106,11 +107,12 @@ apply_manifest() {
   run_remote "$script"
 }
 
-for f in qdrant.yaml listings-cache-pvc.yaml api.yaml scraper.yaml; do
+for f in qdrant.yaml listings-cache-pvc.yaml api.yaml scraper.yaml frontend.yaml; do
   tmp=$(mktemp)
   sed -e "s#\${ECR_API_IMAGE}#${api_image}#g" \
       -e "s#\${ECR_SCRAPER_IMAGE}#${scraper_image}#g" \
       -e "s#\${ECR_QDRANT_IMAGE}#${qdrant_image}#g" \
+      -e "s#\${ECR_FRONTEND_IMAGE}#${frontend_image}#g" \
       "$ROOT/k8s/$f" > "$tmp"
   echo "-- $f --"
   apply_manifest "$tmp"
@@ -118,8 +120,10 @@ for f in qdrant.yaml listings-cache-pvc.yaml api.yaml scraper.yaml; do
 done
 
 api_url=$(terraform -chdir="$INFRA" output -raw api_url)
+frontend_url=$(terraform -chdir="$INFRA" output -raw frontend_url)
 echo ""
-echo "Deployed. API should be reachable at: $api_url"
-echo "The scraper runs as an always-on service now (k8s/scraper.yaml), not a"
+echo "Deployed. Open the app at: $frontend_url"
+echo "API directly reachable at: $api_url"
+echo "The scraper runs as an always-on service (k8s/scraper.yaml), not a"
 echo "CronJob — click 'Scrape now' in the webapp, or POST /api/scan with"
 echo '{"user_id": "...", "fresh": true} to trigger a scrape on demand.'

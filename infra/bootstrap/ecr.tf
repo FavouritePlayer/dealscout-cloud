@@ -10,6 +10,12 @@ resource "aws_ecr_repository" "scraper" {
   force_delete         = true
 }
 
+resource "aws_ecr_repository" "frontend" {
+  name                 = "${var.project_name}/frontend"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+}
+
 # Mirror of the official qdrant/qdrant image so the cluster only ever
 # depends on ECR, not Docker Hub's anonymous pull rate limits.
 resource "aws_ecr_repository" "qdrant" {
@@ -23,9 +29,10 @@ resource "aws_ecr_repository" "qdrant" {
 # up/destroy cycles.
 resource "aws_ecr_lifecycle_policy" "expire_untagged" {
   for_each = {
-    api     = aws_ecr_repository.api.name
-    scraper = aws_ecr_repository.scraper.name
-    qdrant  = aws_ecr_repository.qdrant.name
+    api      = aws_ecr_repository.api.name
+    scraper  = aws_ecr_repository.scraper.name
+    qdrant   = aws_ecr_repository.qdrant.name
+    frontend = aws_ecr_repository.frontend.name
   }
   repository = each.value
   policy = jsonencode({

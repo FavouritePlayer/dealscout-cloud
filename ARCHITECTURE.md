@@ -10,11 +10,11 @@ What runs where, and why each infra decision was made — written to be defensib
 | Scraper (Playwright/Chromium + LLM valuation) | k8s Deployment + Service, auto-scrapes every 30 min and on demand via `POST /scrape` | k3s on the EC2 node |
 | Qdrant (vector memory) | k8s Deployment + Service, backed by a PVC | k3s on the EC2 node |
 | Listings cache | JSON file on a shared PVC | k3s on the EC2 node |
-| Frontend (Next.js) | Not deployed to the cluster — run locally against the cloud API's NodePort during a demo | Your laptop |
+| Frontend (Next.js) | k8s Deployment + Service (NodePort) | k3s on the EC2 node |
 | CI (build + push images) | GitHub Actions | GitHub |
 | Everything else (ECR, SSM, CloudWatch, Budget) | AWS-managed | `us-east-2` |
 
-The frontend isn't in the cluster because nothing in the graded surface area (containers, orchestration, ephemeral lifecycle) needs it there — running it locally against the NodePort keeps k8s scope and node resource pressure down without losing the demo.
+The frontend is deployed alongside everything else so the whole app is reachable from a single public URL (`frontend_url` in Terraform output) without anyone needing a local checkout — it talks to the agent API over the in-cluster Service DNS name (`http://dealscout-api:8000`), not the public NodePort. It's still a small addition, not a different architecture: same NodePort pattern as the API (`k8s/frontend.yaml`, port 30081, security-group-scoped to your own IP — no ALB, no Route53, no extra cost), since nothing about serving a static Next.js build needs anything heavier. Running it locally against the API's NodePort (`cd frontend && BACKEND_URL=http://<node-ip>:30080 npm run dev`) still works too, e.g. for iterating on frontend changes without a full redeploy.
 
 ## CI/CD auth: OIDC was the plan, a scoped IAM user is the reality
 

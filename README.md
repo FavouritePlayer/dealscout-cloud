@@ -32,7 +32,7 @@ POST /api/scan {fresh: true}  ──▶  Agent API (Deployment)  ──POST /scr
     └─ filter_and_rank  →  LLM filters by memory, sorts by profit
     │
     ▼
-Next.js UI (run locally against the cloud API) — queue cards, memory panel, saved flips, history
+Next.js UI (Deployment + NodePort) — queue cards, memory panel, saved flips, history
     │
     ▼
 POST /api/feedback  →  update_memory  →  Qdrant upsert
@@ -77,7 +77,7 @@ cp infra/ephemeral/terraform.tfvars.example infra/ephemeral/terraform.tfvars   #
 ./scripts/down.sh    # tears the instance/SG/EBS volume down, nothing left billing
 ```
 
-`up.sh` prints the API URL (`http://<node-ip>:30080`) when it's done. Point the local frontend at it:
+`up.sh` prints the frontend URL (`http://<node-ip>:30081`) when it's done — open that and the app is live, no local checkout needed. The API is also directly reachable at `http://<node-ip>:30080` if you want to hit it yourself. To iterate on frontend changes without a full redeploy, you can still run it locally against the cloud API instead:
 
 ```bash
 cd frontend && BACKEND_URL=http://<node-ip>:30080 npm run dev
@@ -89,7 +89,7 @@ The scraper auto-refreshes the listings cache every 30 minutes on its own, and t
 
 ## CI/CD
 
-Every push to `main` builds and pushes all three images to ECR via GitHub Actions. Auth was originally designed as OIDC (no stored keys); this account's org SCPs block all OIDC-provider IAM operations, so it falls back to a scoped IAM user (ECR push only, nothing else) with its key as an encrypted GitHub secret — see [ARCHITECTURE.md](ARCHITECTURE.md#cicd-auth-oidc-was-the-plan-a-scoped-iam-user-is-the-reality) for why. CI does **not** auto-deploy — the cluster is ephemeral and often won't exist when CI runs. Deploy manually with `./scripts/deploy.sh` (or `up.sh`, which calls it) whenever the environment is up.
+Every push to `main` builds and pushes all four images to ECR via GitHub Actions. Auth was originally designed as OIDC (no stored keys); this account's org SCPs block all OIDC-provider IAM operations, so it falls back to a scoped IAM user (ECR push only, nothing else) with its key as an encrypted GitHub secret — see [ARCHITECTURE.md](ARCHITECTURE.md#cicd-auth-oidc-was-the-plan-a-scoped-iam-user-is-the-reality) for why. CI does **not** auto-deploy — the cluster is ephemeral and often won't exist when CI runs. Deploy manually with `./scripts/deploy.sh` (or `up.sh`, which calls it) whenever the environment is up.
 
 ## API
 
@@ -115,7 +115,7 @@ dealscout-cloud/
 ├── infra/
 │   ├── bootstrap/                # one-time: ECR, SSM, CloudWatch, budget, GitHub CI IAM user
 │   └── ephemeral/                # per-session: VPC, SG, EC2+k3s
-├── k8s/                          # Deployment/Service for API, scraper, Qdrant
+├── k8s/                          # Deployment/Service for API, scraper, Qdrant, frontend
 ├── scripts/                      # bootstrap.sh, build_and_push.sh, up.sh, down.sh, deploy.sh
 └── .github/workflows/build.yml   # CI: build+push on push to main, no auto-deploy
 ```

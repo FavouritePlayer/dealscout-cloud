@@ -1,8 +1,9 @@
 output "ecr_repo_urls" {
   value = {
-    api     = aws_ecr_repository.api.repository_url
-    scraper = aws_ecr_repository.scraper.repository_url
-    qdrant  = aws_ecr_repository.qdrant.repository_url
+    api      = aws_ecr_repository.api.repository_url
+    scraper  = aws_ecr_repository.scraper.repository_url
+    qdrant   = aws_ecr_repository.qdrant.repository_url
+    frontend = aws_ecr_repository.frontend.repository_url
   }
 }
 

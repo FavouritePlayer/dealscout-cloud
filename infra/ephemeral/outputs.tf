@@ -9,3 +9,7 @@ output "public_ip" {
 output "api_url" {
   value = "http://${aws_instance.node.public_ip}:30080"
 }
+
+output "frontend_url" {
+  value = "http://${aws_instance.node.public_ip}:30081"
+}

@@ -49,7 +49,8 @@ resource "aws_route_table_association" "public" {
 
 # Tightly scoped: no inbound SSH at all (administration goes through SSM
 # Session Manager / Run Command, which needs no open inbound port). Only
-# the k8s NodePort used to demo the API is open, and only to your own IP.
+# the two k8s NodePorts used to demo the app (API + frontend) are open,
+# and only to your own IP.
 resource "aws_security_group" "node" {
   name        = "${var.project_name}-node"
   description = "k3s node: demo NodePort from operator IP only, all egress"
@@ -59,6 +60,14 @@ resource "aws_security_group" "node" {
     description = "Agent API NodePort (operator IP only)"
     from_port   = 30080
     to_port     = 30080
+    protocol    = "tcp"
+    cidr_blocks = ["${var.my_ip}/32"]
+  }
+
+  ingress {
+    description = "Frontend NodePort (operator IP only)"
+    from_port   = 30081
+    to_port     = 30081
     protocol    = "tcp"
     cidr_blocks = ["${var.my_ip}/32"]
   }
