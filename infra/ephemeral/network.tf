@@ -3,7 +3,14 @@
 # packages and inbound for the demo port).
 
 resource "aws_vpc" "main" {
-  cidr_block           = "10.42.0.0/16"
+  # Must NOT overlap k3s/flannel's default pod CIDR (10.42.0.0/16) or
+  # service CIDR (10.43.0.0/16) — the VPC's own DNS resolver lives at
+  # <vpc-cidr-base>+2, and if that address falls inside the pod network,
+  # cluster routing hijacks it: DNS queries meant for the real AWS
+  # resolver loop back into the pod network instead, which is exactly
+  # what CoreDNS's loop-detection was catching (every pod on the cluster
+  # lost external DNS as a result). 10.50.0.0/16 avoids both.
+  cidr_block           = "10.50.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -17,7 +24,7 @@ resource "aws_internet_gateway" "main" {
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.42.1.0/24"
+  cidr_block              = "10.50.1.0/24"
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
