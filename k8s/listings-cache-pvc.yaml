@@ -1,0 +1,12 @@
+# Shared between the API Deployment and the scraper CronJob/Job — both
+# are on the same (only) node, so ReadWriteOnce local-path is fine.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: listings-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 256Mi

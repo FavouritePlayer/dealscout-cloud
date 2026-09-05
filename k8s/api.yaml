@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dealscout-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dealscout-api }
+  template:
+    metadata:
+      labels: { app: dealscout-api }
+    spec:
+      imagePullSecrets:
+        - name: ecr-pull-secret
+      containers:
+        - name: api
+          image: ${ECR_API_IMAGE}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: QDRANT_URL
+              value: "http://qdrant:6333"
+            - name: LISTINGS_CACHE_PATH
+              value: "/data/listings_cache.json"
+          envFrom:
+            - secretRef:
+                name: dealscout-secrets
+          volumeMounts:
+            - name: listings-cache
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /docs, port: 8000 }
+            initialDelaySeconds: 5
+      volumes:
+        - name: listings-cache
+          persistentVolumeClaim:
+            claimName: listings-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dealscout-api
+spec:
+  type: NodePort
+  selector: { app: dealscout-api }
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
