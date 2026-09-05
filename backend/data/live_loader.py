@@ -85,8 +85,17 @@ def _estimate_distance(location: str) -> float:
 
 def _scrape_category(page, category: str, code: str) -> list[dict]:
     page.goto(f"{CRAIGSLIST_BASE}/search/{code}", wait_until="domcontentloaded")
-    page.wait_for_selector("li.cl-static-search-result", state="attached", timeout=15000)
+    page.wait_for_selector("li.cl-static-search-result", state="attached", timeout=25000)
     cards = page.query_selector_all("li.cl-static-search-result")
+    if not cards:
+        # The results list is injected client-side after the initial DOM
+        # attach event, and under CPU pressure (multiple categories
+        # scraped back-to-back on a small instance) that injection can
+        # still be in flight when wait_for_selector resolves on a
+        # transient/earlier attach — one short re-check catches it
+        # instead of silently returning an empty category.
+        page.wait_for_timeout(2000)
+        cards = page.query_selector_all("li.cl-static-search-result")
 
     listings = []
     for i, card in enumerate(cards):
@@ -117,16 +126,23 @@ def _scrape_category(page, category: str, code: str) -> list[dict]:
 
 
 def _scrape_all_categories() -> list[dict]:
+    # A fresh page per category, not one page reused for all six: reusing
+    # a single page let DOM/memory state accumulate across navigations,
+    # which under this instance's limited CPU slowed later categories'
+    # client-side rendering enough to blow past wait_for_selector's
+    # timeout — in practice only the first category (furniture) ever
+    # reliably returned results.
     listings = []
     with sync_playwright() as p:
         browser = _launch(p)
-        page = browser.new_page()
         for category, code in CATEGORY_CODES.items():
+            page = browser.new_page()
             try:
                 listings.extend(_scrape_category(page, category, code))
             except Exception as exc:
                 logger.warning("scrape failed for %s (%s): %s", category, code, exc)
-                continue
+            finally:
+                page.close()
         browser.close()
     return listings
 
