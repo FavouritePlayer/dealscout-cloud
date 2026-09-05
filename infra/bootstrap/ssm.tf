@@ -12,6 +12,8 @@ locals {
     "gemini_model_id"    = { value = var.gemini_model_id, secure = false }
     "nebius_api_key"     = { value = var.nebius_api_key, secure = true }
     "nebius_model_id"    = { value = var.nebius_model_id, secure = false }
+    "openai_api_key"     = { value = var.openai_api_key, secure = true }
+    "openai_model_id"    = { value = var.openai_model_id, secure = false }
   }
 }
 

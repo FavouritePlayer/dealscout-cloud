@@ -4,7 +4,7 @@
 
 budget_alert_email = "you@example.com"
 
-llm_provider       = "anthropic"
+llm_provider       = "openai"
 anthropic_api_key  = ""
 anthropic_model_id = "claude-haiku-4-5-20251001"
 
@@ -13,3 +13,6 @@ gemini_model_id = "gemini-2.5-flash"
 
 nebius_api_key  = ""
 nebius_model_id = ""
+
+openai_api_key  = ""
+openai_model_id = "gpt-4.1-mini"

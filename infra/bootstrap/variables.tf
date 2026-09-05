@@ -60,3 +60,14 @@ variable "nebius_model_id" {
   type    = string
   default = ""
 }
+
+variable "openai_api_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "openai_model_id" {
+  type    = string
+  default = "gpt-4.1-mini"
+}

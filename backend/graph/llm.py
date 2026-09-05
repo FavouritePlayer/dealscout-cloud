@@ -22,6 +22,11 @@ _PROVIDERS = {
         "api_key": os.environ.get("ANTHROPIC_API_KEY"),
         "model": os.environ.get("ANTHROPIC_MODEL_ID", "claude-haiku-4-5-20251001"),
     },
+    "openai": {
+        "base_url": "https://api.openai.com/v1/",
+        "api_key": os.environ.get("OPENAI_API_KEY"),
+        "model": os.environ.get("OPENAI_MODEL_ID", "gpt-4.1-mini"),
+    },
 }
 _provider = _PROVIDERS[os.environ.get("LLM_PROVIDER", "gemini")]
 

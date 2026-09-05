@@ -53,6 +53,8 @@ gemini_key=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --nam
 gemini_model=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --name "/${project_name}/gemini_model_id" --query Parameter.Value --output text)
 nebius_key=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --name "/${project_name}/nebius_api_key" --with-decryption --query Parameter.Value --output text)
 nebius_model=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --name "/${project_name}/nebius_model_id" --query Parameter.Value --output text)
+openai_key=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --name "/${project_name}/openai_api_key" --with-decryption --query Parameter.Value --output text)
+openai_model=$(aws ssm get-parameter --profile "$PROFILE" --region "$REGION" --name "/${project_name}/openai_model_id" --query Parameter.Value --output text)
 
 secrets_script=$(cat <<EOF
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -67,7 +69,9 @@ kubectl create secret generic dealscout-secrets \
   --from-literal=GEMINI_API_KEY="${gemini_key}" \
   --from-literal=GEMINI_MODEL_ID="${gemini_model}" \
   --from-literal=NEBIUS_API_KEY="${nebius_key}" \
-  --from-literal=NEBIUS_MODEL_ID="${nebius_model}"
+  --from-literal=NEBIUS_MODEL_ID="${nebius_model}" \
+  --from-literal=OPENAI_API_KEY="${openai_key}" \
+  --from-literal=OPENAI_MODEL_ID="${openai_model}"
 EOF
 )
 run_remote "$secrets_script"
