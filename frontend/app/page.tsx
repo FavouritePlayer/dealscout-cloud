@@ -28,7 +28,7 @@ const SECTION_DESC: Record<Section, string> = {
   queue:
     "DealScout scanned local listings for undervalued flips. Reject anything you don\u2019t want to deal with — it\u2019ll remember.",
   memory:
-    "View and edit the rules DealScout stores in HydraDB. Changes apply on the next scan.",
+    "View and edit the rules DealScout stores in Qdrant. Changes apply on the next scan.",
   history: "A log of scans, rejections, saves, and memory edits this session.",
   saved: "The flips you saved from the queue, kept here for later.",
 };
@@ -162,7 +162,7 @@ export default function HomePage() {
     logHistory({
       type: "rescan",
       title: "Rescan from scratch",
-      detail: "Cleared HydraDB memory and ran a fresh scan",
+      detail: "Cleared Qdrant memory and ran a fresh scan",
     });
     await doScan();
   }, [doScan, logHistory, refreshPreferences]);
@@ -176,7 +176,7 @@ export default function HomePage() {
         logHistory({
           type: "memory_update",
           title: "Updated memory rules",
-          detail: `${res.preferences.length} rule(s) saved to HydraDB`,
+          detail: `${res.preferences.length} rule(s) saved to Qdrant`,
         });
       } finally {
         setSavingMemory(false);

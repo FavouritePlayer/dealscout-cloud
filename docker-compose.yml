@@ -1,0 +1,63 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      MEMORY_TENANT_ID: ${MEMORY_TENANT_ID:-dealscout}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL_ID: ${ANTHROPIC_MODEL_ID:-claude-haiku-4-5-20251001}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_ID: ${GEMINI_MODEL_ID:-gemini-2.5-flash}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      NEBIUS_MODEL_ID: ${NEBIUS_MODEL_ID:-}
+      LISTINGS_CACHE_PATH: /data/listings_cache.json
+    volumes:
+      - listings_cache:/data
+    depends_on:
+      - qdrant
+
+  # One-shot by default (`docker compose run scraper`), not a long-lived
+  # service — mirrors the CronJob/Job pattern used in the k8s manifests.
+  scraper:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.scraper
+    profiles: ["scraper"]
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL_ID: ${ANTHROPIC_MODEL_ID:-claude-haiku-4-5-20251001}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_ID: ${GEMINI_MODEL_ID:-gemini-2.5-flash}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      NEBIUS_MODEL_ID: ${NEBIUS_MODEL_ID:-}
+      LISTINGS_CACHE_PATH: /data/listings_cache.json
+      PLAYWRIGHT_HEADED: ${PLAYWRIGHT_HEADED:-0}
+    volumes:
+      - listings_cache:/data
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  qdrant_data:
+  listings_cache:

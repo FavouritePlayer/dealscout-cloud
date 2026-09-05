@@ -1,0 +1,15 @@
+# Matches requirements-scraper.txt's pinned playwright version so the
+# preinstalled browser build always lines up with the Python package.
+FROM mcr.microsoft.com/playwright/python:v1.62.0-noble
+
+WORKDIR /app
+
+COPY backend/requirements.txt backend/requirements.txt
+COPY backend/requirements-scraper.txt backend/requirements-scraper.txt
+RUN pip install --no-cache-dir -r backend/requirements-scraper.txt
+
+COPY backend backend
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "backend.scraper_job"]

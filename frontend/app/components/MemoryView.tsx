@@ -99,7 +99,7 @@ export default function MemoryView({ preferences, onSave, saving }: Props) {
           <h2 className="text-lg font-semibold">Memory</h2>
           <p className="text-sm text-[var(--muted)] mt-1">
             Edit what DealScout remembers about your flip preferences. Changes
-            sync to HydraDB and apply on the next scan.
+            sync to Qdrant and apply on the next scan.
           </p>
         </div>
         <span className="text-[10px] uppercase tracking-wider font-bold rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 shrink-0">
@@ -193,7 +193,7 @@ export default function MemoryView({ preferences, onSave, saving }: Props) {
           disabled={!dirty || saving}
           className="text-sm font-semibold rounded-full px-4 py-2.5 bg-black text-white hover:bg-neutral-800 disabled:opacity-50 transition"
         >
-          {saving ? "Saving to HydraDB…" : "Save changes"}
+          {saving ? "Saving to Qdrant…" : "Save changes"}
         </button>
         {dirty && !saving && (
           <span className="text-xs text-amber-700 font-medium">
