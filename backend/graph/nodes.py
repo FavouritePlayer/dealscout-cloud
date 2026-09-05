@@ -2,9 +2,9 @@ import json
 
 from backend.graph.llm import complete_with_retry
 from backend.graph.state import DealScoutState
-from backend.memory.hydra_client import HydraMemoryClient
+from backend.memory.qdrant_client import QdrantMemoryClient
 
-_hydra = HydraMemoryClient()
+_memory = QdrantMemoryClient()
 
 # Anything priced this far under its estimated resale value counts as a flip
 # worth surfacing; everything else is shown as overvalued (and filtered out
@@ -13,7 +13,7 @@ MARGIN_PCT_THRESHOLD = 0.25
 
 
 def retrieve_memory(state: DealScoutState) -> DealScoutState:
-    memory_text = _hydra.recall(
+    memory_text = _memory.recall(
         user_id=state["user_id"],
         query="flip category and condition avoid-rules",
     )
@@ -92,5 +92,5 @@ they want to avoid, exclude its id from keep_ids."""
 def update_memory(state: DealScoutState) -> DealScoutState:
     if not state.get("feedback"):
         return state
-    _hydra.remember(user_id=state["user_id"], text=state["feedback"])
+    _memory.remember(user_id=state["user_id"], text=state["feedback"])
     return state

@@ -7,9 +7,9 @@ load_dotenv(Path(__file__).parent / ".env")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.data.live_loader import attach_images, load_listings
+from backend.data.cache import read_listings_cache
 from backend.graph.graph import feedback_graph, scan_graph
-from backend.memory.hydra_client import HydraMemoryClient
+from backend.memory.qdrant_client import QdrantMemoryClient
 from backend.memory.preference_parser import parse_preferences, preference_to_text
 from backend.memory.schema import (
     FeedbackRequest,
@@ -29,12 +29,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_hydra = HydraMemoryClient()
+_memory = QdrantMemoryClient()
 
 
 @app.post("/api/scan", response_model=ScanResponse)
 def scan(req: ScanRequest):
-    candidates = load_listings()
+    candidates = read_listings_cache()
     if req.radius_miles is not None:
         candidates = [c for c in candidates if c["distance_miles"] <= req.radius_miles]
     result = scan_graph.invoke({
@@ -43,7 +43,7 @@ def scan(req: ScanRequest):
         "candidates": candidates,
     })
     return {
-        "queue": attach_images(result["queue"]),
+        "queue": result["queue"],
         "explanation": result["explanation"],
         "memory_used": parse_preferences(result["memory_context"]),
     }
@@ -59,18 +59,18 @@ def feedback(req: FeedbackRequest):
 
 @app.get("/api/preferences/{user_id}", response_model=PreferencesResponse)
 def preferences(user_id: str):
-    text = _hydra.recall(user_id=user_id, query="flip category and condition avoid-rules")
+    text = _memory.recall(user_id=user_id, query="flip category and condition avoid-rules")
     return {"preferences": parse_preferences(text)}
 
 
 @app.put("/api/preferences/{user_id}", response_model=PreferencesResponse)
 def set_preferences(user_id: str, req: SetPreferencesRequest):
     texts = [preference_to_text(p.model_dump()) for p in req.preferences]
-    _hydra.replace_preferences(user_id, texts)
+    _memory.replace_preferences(user_id, texts)
     return {"preferences": [p.model_dump() for p in req.preferences]}
 
 
 @app.delete("/api/preferences/{user_id}")
 def clear_preferences(user_id: str):
-    _hydra.forget_all(user_id)
+    _memory.forget_all(user_id)
     return {"ok": True}

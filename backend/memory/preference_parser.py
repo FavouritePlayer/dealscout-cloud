@@ -1,7 +1,7 @@
-"""Converts HydraDB's raw recalled memory text into the structured
+"""Converts Qdrant's raw recalled memory text into the structured
 {key, value, polarity} shape the frontend's API contract expects.
 
-HydraDB's query() returns free text (chunk_content), not clean fields, so
+Qdrant's query() returns free text (chunk_content), not clean fields, so
 this is a thin heuristic adapter at the API boundary. Generalized beyond the
 original chair/color demo to the flip-or-flop vocab: a rejection reason maps
 to a `category` and/or `condition` avoid-rule, matching the fixed vocab in
@@ -47,7 +47,7 @@ def parse_preferences(text: str) -> list[dict]:
 
 def preference_to_text(pref: dict) -> str:
     """Turn a structured {key, value, polarity} back into natural language
-    for HydraDB ingest — mirrors what a rejection reason would look like."""
+    for Qdrant ingest — mirrors what a rejection reason would look like."""
     key, value, polarity = pref["key"], pref["value"], pref["polarity"]
     label = value.replace("_", " ")
     if key == "category":
