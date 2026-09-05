@@ -38,15 +38,20 @@ SCRAPER_URL = os.environ.get("SCRAPER_URL", "http://dealscout-scraper:8001")
 
 def _trigger_live_scrape() -> None:
     """Ask the scraper service to refresh the listings cache and block
-    until it's done (a real scrape takes well under the timeout below,
-    including the LLM value-estimation and per-listing image fetch).
+    until it's done.
+
+    At 20 items/category across 6 categories (120 listings) plus one
+    large LLM valuation call, this can take a few minutes — 180s was
+    cutting it close and produced a false "scrape failed" even on a
+    scrape that went on to succeed a few seconds later. 300s gives real
+    headroom.
 
     A 409 means a scrape (scheduled or another on-demand trigger) is
     already in flight — treated as fine, since the cache is either about
     to be fresh or already is.
     """
     try:
-        res = httpx.post(f"{SCRAPER_URL}/scrape", timeout=180.0)
+        res = httpx.post(f"{SCRAPER_URL}/scrape", timeout=300.0)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502,
