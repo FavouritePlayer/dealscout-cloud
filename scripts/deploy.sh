@@ -106,7 +106,7 @@ apply_manifest() {
   run_remote "$script"
 }
 
-for f in qdrant.yaml listings-cache-pvc.yaml api.yaml scraper-cronjob.yaml; do
+for f in qdrant.yaml listings-cache-pvc.yaml api.yaml scraper.yaml; do
   tmp=$(mktemp)
   sed -e "s#\${ECR_API_IMAGE}#${api_image}#g" \
       -e "s#\${ECR_SCRAPER_IMAGE}#${scraper_image}#g" \
@@ -120,7 +120,6 @@ done
 api_url=$(terraform -chdir="$INFRA" output -raw api_url)
 echo ""
 echo "Deployed. API should be reachable at: $api_url"
-echo "Trigger an immediate scrape (don't wait for the schedule):"
-echo "  aws ssm send-command --profile $PROFILE --region $REGION --instance-ids $instance_id \\"
-echo "    --document-name AWS-RunShellScript \\"
-echo "    --parameters 'commands=[\"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; kubectl create job --from=cronjob/dealscout-scraper manual-scan-\$(date +%s)\"]'"
+echo "The scraper runs as an always-on service now (k8s/scraper.yaml), not a"
+echo "CronJob — click 'Scrape now' in the webapp, or POST /api/scan with"
+echo '{"user_id": "...", "fresh": true} to trigger a scrape on demand.'

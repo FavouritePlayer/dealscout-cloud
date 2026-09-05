@@ -6,11 +6,14 @@ import type {
   ScanResponse,
 } from "./types";
 
-export async function scan(userId: string): Promise<ScanResponse> {
+export async function scan(
+  userId: string,
+  opts?: { fresh?: boolean }
+): Promise<ScanResponse> {
   const res = await fetch("/api/scan", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ user_id: userId }),
+    body: JSON.stringify({ user_id: userId, fresh: opts?.fresh ?? false }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

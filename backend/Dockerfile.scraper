@@ -12,4 +12,4 @@ COPY backend backend
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "backend.scraper_job"]
+CMD ["uvicorn", "backend.scraper_job:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -1,10 +1,12 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.data.cache import read_listings_cache
@@ -31,9 +33,36 @@ app.add_middleware(
 
 _memory = QdrantMemoryClient()
 
+SCRAPER_URL = os.environ.get("SCRAPER_URL", "http://dealscout-scraper:8001")
+
+
+def _trigger_live_scrape() -> None:
+    """Ask the scraper service to refresh the listings cache and block
+    until it's done (a real scrape takes well under the timeout below,
+    including the LLM value-estimation and per-listing image fetch).
+
+    A 409 means a scrape (scheduled or another on-demand trigger) is
+    already in flight — treated as fine, since the cache is either about
+    to be fresh or already is.
+    """
+    try:
+        res = httpx.post(f"{SCRAPER_URL}/scrape", timeout=180.0)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Live scrape unavailable — couldn't reach the scraper service: {exc}",
+        )
+    if res.status_code not in (200, 409):
+        raise HTTPException(
+            status_code=502,
+            detail=f"Live scrape failed (scraper returned {res.status_code}): {res.text}",
+        )
+
 
 @app.post("/api/scan", response_model=ScanResponse)
 def scan(req: ScanRequest):
+    if req.fresh:
+        _trigger_live_scrape()
     candidates = read_listings_cache()
     if req.radius_miles is not None:
         candidates = [c for c in candidates if c["distance_miles"] <= req.radius_miles]

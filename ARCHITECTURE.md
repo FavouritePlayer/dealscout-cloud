@@ -7,7 +7,7 @@ What runs where, and why each infra decision was made — written to be defensib
 | Component | Runs as | Where |
 |---|---|---|
 | Agent API (FastAPI + LangGraph) | k8s Deployment + Service (NodePort) | k3s on the EC2 node |
-| Scraper (Playwright/Chromium + LLM valuation) | k8s CronJob (every 30 min), or a one-off Job before a demo | k3s on the EC2 node |
+| Scraper (Playwright/Chromium + LLM valuation) | k8s Deployment + Service, auto-scrapes every 30 min and on demand via `POST /scrape` | k3s on the EC2 node |
 | Qdrant (vector memory) | k8s Deployment + Service, backed by a PVC | k3s on the EC2 node |
 | Listings cache | JSON file on a shared PVC | k3s on the EC2 node |
 | Frontend (Next.js) | Not deployed to the cluster — run locally against the cloud API's NodePort during a demo | Your laptop |
@@ -24,7 +24,7 @@ So CI/CD here uses the real-world fallback: an IAM user (`infra/bootstrap/github
 
 ## Why k3s-on-EC2 instead of EKS
 
-EKS's control plane costs ~$73/month with **no free-tier coverage**, before a single worker node is added — that alone blows a $10 total budget. k3s is a real, CNCF-conformant Kubernetes distribution; running it single-node on a $0.02/hr EC2 instance gets Deployments, Services, CronJobs, and PVCs — the actual orchestration primitives being demonstrated — without paying for a managed control plane this project doesn't need. The tradeoff is real: no managed control-plane HA, no multi-AZ, no managed upgrades. That tradeoff is the right one for a single-node demo cluster that's up for a few hours at a time; it would not be the right one for production (see below).
+EKS's control plane costs ~$73/month with **no free-tier coverage**, before a single worker node is added — that alone blows a $10 total budget. k3s is a real, CNCF-conformant Kubernetes distribution; running it single-node on a $0.02/hr EC2 instance gets Deployments, Services, and PVCs — the actual orchestration primitives being demonstrated — without paying for a managed control plane this project doesn't need. The tradeoff is real: no managed control-plane HA, no multi-AZ, no managed upgrades. That tradeoff is the right one for a single-node demo cluster that's up for a few hours at a time; it would not be the right one for production (see below).
 
 ## Why the cluster is ephemeral
 
@@ -55,15 +55,13 @@ Per demo session (node up for ~2-3 hours, then destroyed):
 
 Even 20-30 interview sessions in a month stays under $2-3, against a $10 budget with an $8 alert as backstop — the alert should never actually fire under normal use.
 
-## Why a CronJob over a long-running scraper pod
+## Why a small always-on scraper service, not a CronJob
 
-The original hackathon build scraped Craigslist synchronously, inside the FastAPI request handler, on every `/api/scan` call. That doesn't survive being split into separate containers (Step 3 asks for the agent/API and the Playwright scraper as distinct images) — and even if it did, keeping headless Chromium warm in an always-on pod for scans that only need to happen periodically is paying for idle capacity for no reason.
+The original hackathon build scraped Craigslist synchronously, inside the FastAPI request handler, on every `/api/scan` call. That doesn't survive being split into separate containers (Step 3 asks for the agent/API and the Playwright scraper as distinct images), and it also means every scan pays full scrape latency.
 
-Instead: a **CronJob** runs the scraper every 30 minutes, writing scraped-and-valued listings (now including images for *every* listing, not just the final filtered queue — see `backend/scraper_job.py`, this was previously skipped as a perf optimization for the synchronous request path, which no longer applies once scraping isn't blocking a user request) to a JSON file on a shared PVC. The agent API's `/api/scan` reads that cache instead of scraping live — so the API image ships with no Chromium at all, and the request path has no Playwright dependency or latency. Before a demo, trigger a fresh scrape on demand instead of waiting on the schedule:
+The first cut of this redesign used a **CronJob** on a 30-minute schedule instead, writing scraped-and-valued listings (now including images for *every* listing, not just the final filtered queue — see `backend/scraper_job.py`; this was previously skipped as a perf optimization for the synchronous request path, which no longer applies once scraping isn't blocking a user request) to a JSON file on a shared PVC, with `/api/scan` reading that cache instead of scraping live. That got the API image off Chromium entirely, but it also meant the only way to force a fresh scrape was a human running `kubectl create job --from=cronjob/...` from the CLI — there was no way for the webapp itself to ask for one.
 
-```bash
-kubectl create job --from=cronjob/dealscout-scraper manual-scan-$(date +%s)
-```
+So the scraper is instead a small **Deployment** (`k8s/scraper.yaml`) exposing `POST /scrape` over the cluster network, plus a background thread that still re-scrapes on the same 30-minute interval so the cache doesn't go stale if nobody clicks anything. `/api/scan` calls that endpoint synchronously when the request sets `fresh: true` (the webapp's "Scrape now" button) before reading the cache — otherwise it reads the cache straight away, same as before. The API image still ships with no Chromium and no Playwright dependency; only the scraper container has that. The "idle capacity" concern that motivated the CronJob in the first place doesn't really apply here — this is a single EC2 node already running the API pod and Qdrant continuously, so one more small FastAPI process idling alongside them costs no extra money, it only costs some RAM headroom on the node, and Playwright's Chromium is only launched for the duration of an actual scrape, not held open between requests.
 
 ## Why Qdrant over pgvector
 
@@ -89,5 +87,5 @@ Horizontal Pod Autoscaling has nothing to scale onto here: this is a single-node
 | SSM Parameter Store | Secrets Manager | Automatic rotation and finer-grained access policies become worth the per-secret cost at production scale |
 | No HPA | HPA (+ Cluster Autoscaler) | Real, variable traffic needs real elastic capacity across multiple nodes |
 | NodePort + your own IP in the SG | ALB/NLB + proper TLS + WAF | A NodePort scoped to one operator's IP is a demo shortcut, not a public-facing entry point |
-| CronJob scraping every 30 min | Event-driven or continuously-tuned scan cadence, likely with a real message queue between scraping and scoring | A demo's fixed schedule doesn't reflect real marketplace update patterns or scaling needs |
+| Fixed 30-min auto-scrape + on-demand trigger | Event-driven or continuously-tuned scan cadence, likely with a real message queue between scraping and scoring | A demo's fixed schedule doesn't reflect real marketplace update patterns or scaling needs |
 | Single Qdrant replica, PVC on local-path storage | Qdrant cluster mode (or a managed vector DB), replicated storage | A single-node PVC has no redundancy — fine for a disposable demo, not for data you can't afford to lose |

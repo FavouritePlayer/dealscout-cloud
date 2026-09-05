@@ -39,6 +39,7 @@ export default function HomePage() {
   const [preferences, setPreferences] = useState<Preference[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [scrapingLive, setScrapingLive] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [savingMemory, setSavingMemory] = useState(false);
   const [rejecting, setRejecting] = useState<QueueItem | null>(null);
@@ -68,28 +69,36 @@ export default function HomePage() {
     setPreferences(preferences);
   }, []);
 
-  const doScan = useCallback(async () => {
-    setScanning(true);
-    setScanError(null);
-    try {
-      const res = await api.scan(USER_ID);
-      setQueue(res.queue);
-      setExplanation(res.explanation);
-      logHistory({
-        type: "scan",
-        title: `Scan returned ${res.queue.length} flip${res.queue.length === 1 ? "" : "s"}`,
-        detail: res.explanation,
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Scan failed — try again";
-      setScanError(message);
-      setQueue([]);
-      setExplanation("");
-    } finally {
-      setScanning(false);
-    }
-  }, [logHistory]);
+  const doScan = useCallback(
+    async (opts?: { fresh?: boolean }) => {
+      const fresh = opts?.fresh ?? false;
+      setScanning(true);
+      if (fresh) setScrapingLive(true);
+      setScanError(null);
+      try {
+        const res = await api.scan(USER_ID, { fresh });
+        setQueue(res.queue);
+        setExplanation(res.explanation);
+        logHistory({
+          type: "scan",
+          title: fresh
+            ? `Scraped live listings — ${res.queue.length} flip${res.queue.length === 1 ? "" : "s"}`
+            : `Scan returned ${res.queue.length} flip${res.queue.length === 1 ? "" : "s"}`,
+          detail: res.explanation,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Scan failed — try again";
+        setScanError(message);
+        setQueue([]);
+        setExplanation("");
+      } finally {
+        setScanning(false);
+        setScrapingLive(false);
+      }
+    },
+    [logHistory]
+  );
 
   const handleReject = useCallback((item: QueueItem) => {
     setRejecting(item);
@@ -153,6 +162,8 @@ export default function HomePage() {
     },
     [logHistory, refreshPreferences]
   );
+
+  const handleScrapeNow = useCallback(() => doScan({ fresh: true }), [doScan]);
 
   const handleRescan = useCallback(async () => {
     await api.clearSession(USER_ID);
@@ -250,7 +261,7 @@ export default function HomePage() {
                     </button>
                   </div>
                   <button
-                    onClick={doScan}
+                    onClick={() => doScan()}
                     disabled={scanning}
                     className="flex items-center gap-2 bg-white border border-[var(--border)] rounded-full px-4 py-2 text-sm font-semibold hover:bg-neutral-50 disabled:opacity-50 transition"
                   >
@@ -273,7 +284,39 @@ export default function HomePage() {
                         strokeLinejoin="round"
                       />
                     </svg>
-                    {scanning ? "Scanning…" : "Rescan"}
+                    {scanning && !scrapingLive ? "Scanning…" : "Rescan"}
+                  </button>
+                  <button
+                    onClick={handleScrapeNow}
+                    disabled={scanning}
+                    title="Scrape fresh listings from Craigslist — takes up to a minute"
+                    className="flex items-center gap-2 bg-white border border-[var(--border)] rounded-full px-4 py-2 text-sm font-semibold hover:bg-neutral-50 disabled:opacity-50 transition"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        d="M12 3v12"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M7 10l5 5 5-5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M4 19h16"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    {scrapingLive ? "Scraping…" : "Scrape now"}
                   </button>
                 </>
               )}

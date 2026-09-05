@@ -24,19 +24,24 @@ services:
       NEBIUS_MODEL_ID: ${NEBIUS_MODEL_ID:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL_ID: ${OPENAI_MODEL_ID:-gpt-4.1-mini}
+      SCRAPER_URL: http://scraper:8001
       LISTINGS_CACHE_PATH: /data/listings_cache.json
     volumes:
       - listings_cache:/data
     depends_on:
       - qdrant
+      - scraper
 
-  # One-shot by default (`docker compose run scraper`), not a long-lived
-  # service — mirrors the CronJob/Job pattern used in the k8s manifests.
+  # Always-on, not one-shot — mirrors k8s/scraper.yaml. Auto-scrapes every
+  # 30 min in the background, and exposes POST /scrape for the API to call
+  # on demand ("Scrape now" in the webapp, or `docker compose exec api
+  # curl -X POST http://scraper:8001/scrape` directly).
   scraper:
     build:
       context: .
       dockerfile: backend/Dockerfile.scraper
-    profiles: ["scraper"]
+    ports:
+      - "8001:8001"
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

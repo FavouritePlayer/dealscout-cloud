@@ -31,6 +31,7 @@ class Preference(BaseModel):
 class ScanRequest(BaseModel):
     user_id: str
     radius_miles: float | None = None
+    fresh: bool = False
 
 
 class ScanResponse(BaseModel):

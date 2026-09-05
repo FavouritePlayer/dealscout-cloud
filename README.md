@@ -15,7 +15,7 @@ DealScout scans Craigslist listings across multiple categories (furniture, elect
 | Agent | LangGraph, Python |
 | Memory | Qdrant (self-hosted vector store) + local `fastembed` embeddings |
 | LLM | Anthropic / Gemini / Nebius (OpenAI-compatible) |
-| Scraping | Playwright (headless Chromium), runs as a k8s CronJob/Job, not a long-lived pod |
+| Scraping | Playwright (headless Chromium), a small k8s Deployment: auto-scrapes every 30 min, plus on-demand via `POST /scrape` |
 | Backend | FastAPI, Pydantic |
 | Frontend | Next.js 15, React 19, Tailwind CSS 4, TypeScript |
 | Infra | Terraform, k3s on a single EC2 instance, ECR, SSM Parameter Store, CloudWatch Logs |
@@ -23,10 +23,10 @@ DealScout scans Craigslist listings across multiple categories (furniture, elect
 ## Architecture
 
 ```
-CronJob (scraper, Playwright/Chromium)  ──every 30 min──▶  listings cache (PVC)
-                                                                    │
-POST /api/scan  ──▶  Agent API (Deployment)                        │
-    ├─ read cache ◀─────────────────────────────────────────────────┘
+Scraper (Deployment, Playwright/Chromium)  ──every 30 min, or on demand──▶  listings cache (PVC)
+                                                                                    │
+POST /api/scan {fresh: true}  ──▶  Agent API (Deployment)  ──POST /scrape──▶ Scraper
+    ├─ read cache ◀─────────────────────────────────────────────────────────────────┘
     ├─ retrieve_memory  →  Qdrant (user avoid/prefer rules)
     ├─ classify_value   →  margin arithmetic (25% threshold)
     └─ filter_and_rank  →  LLM filters by memory, sorts by profit
@@ -83,13 +83,7 @@ cp infra/ephemeral/terraform.tfvars.example infra/ephemeral/terraform.tfvars   #
 cd frontend && BACKEND_URL=http://<node-ip>:30080 npm run dev
 ```
 
-Force a fresh scrape right before a demo instead of waiting on the schedule — `up.sh`'s output includes the exact command, or:
-
-```bash
-aws ssm send-command --profile dealscout --instance-ids <id> \
-  --document-name AWS-RunShellScript \
-  --parameters 'commands=["export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; kubectl create job --from=cronjob/dealscout-scraper manual-scan-$(date +%s)"]'
-```
+The scraper auto-refreshes the listings cache every 30 minutes on its own, and the webapp's **Scrape now** button triggers one immediately (it calls `POST /api/scan` with `fresh: true`, which the agent API forwards to the scraper's `POST /scrape`) — no need to shell into the node for a fresh scrape before a demo.
 
 **Cost**: well under $0.10 per multi-hour demo session (see [ARCHITECTURE.md](ARCHITECTURE.md#cost)). The $8 budget alert is a backstop, not the expected spend.
 
@@ -113,7 +107,7 @@ Every push to `main` builds and pushes all three images to ECR via GitHub Action
 dealscout-cloud/
 ├── backend/
 │   ├── app.py                    # FastAPI server (no Playwright dependency)
-│   ├── scraper_job.py            # CronJob/Job entrypoint (Playwright)
+│   ├── scraper_job.py            # scraper service entrypoint (Playwright), FastAPI + auto-scrape thread
 │   ├── graph/                    # LangGraph agent (scan + feedback pipelines)
 │   ├── memory/                   # Qdrant client, preference parsing
 │   └── data/                     # live_loader (scrape+value), cache (shared with API)
@@ -121,7 +115,7 @@ dealscout-cloud/
 ├── infra/
 │   ├── bootstrap/                # one-time: ECR, SSM, CloudWatch, budget, GitHub CI IAM user
 │   └── ephemeral/                # per-session: VPC, SG, EC2+k3s
-├── k8s/                          # Deployment/Service (API), CronJob (scraper), Qdrant
+├── k8s/                          # Deployment/Service for API, scraper, Qdrant
 ├── scripts/                      # bootstrap.sh, build_and_push.sh, up.sh, down.sh, deploy.sh
 └── .github/workflows/build.yml   # CI: build+push on push to main, no auto-deploy
 ```
